@@ -142,6 +142,10 @@ local function wsync()
   if g_synclineno ~= g_lineno and g_opt.cpp then
     if g_opt.lang ~= "lua" then
       wline(format("#line %d %q", g_lineno, g_fname))
+    elseif g_lineno > g_synclineno then
+      wline(rep("\n", g_lineno - g_synclineno - 1))
+    else
+      return
     end
     g_synclineno = g_lineno
   end
@@ -420,8 +424,9 @@ map_coreop[".include_1"] = function(params)
   -- Read the included file.
   local fatal = readfile(pathopen(g_opt.include, name) or
 			 wfatal("include file `"..name.."' not found"))
-  -- Restore state.
-  g_synclineno = -1
+  if g_opt.lang ~= "lua" then
+    g_synclineno = -1 -- Restore state.
+  end
   g_fname, g_lineno, g_curline, g_indent = gf, gl, gcl, gi
   if fatal then wfatal("in include file") end
 end
@@ -637,6 +642,7 @@ map_coreop[".section_*"] = function(params)
   if not params then return "name..." end
   if #map_sections > 0 then werror("duplicate section definition") end
   wflush()
+  local s = ""
   for sn,name in ipairs(params) do
     local opname = "."..name.."_0"
     if not match(name, "^[%a][%w_]*$") or
@@ -645,14 +651,18 @@ map_coreop[".section_*"] = function(params)
     end
     map_sections[#map_sections+1] = name
     if g_opt.lang == "lua" then
-      wline(format("local DASM_SECTION_%s\t= %d", upper(name), sn-1))
+      s = s .. "DASM_SECTION_" .. upper(name) .. ", "
     else
       wline(format("#define DASM_SECTION_%s\t%d", upper(name), sn-1))
     end
     map_op[opname] = function(params) g_arch.section(sn-1) end
   end
   if g_opt.lang == "lua" then
-    wline(format("local DASM_MAXSECTION\t= %d", #map_sections))
+    s = "local " .. s .. "DASM_MAXSECTION = "
+    for i = 0, #map_sections - 1 do
+      s = s .. i .. ", "
+    end
+    wline(s .. #map_sections)
   else
     wline(format("#define DASM_MAXSECTION\t\t%d", #map_sections))
   end
@@ -741,9 +751,7 @@ map_initop[".arch_1"] = function(params)
   local err = loadarch(params[1])
   if err then wfatal(err) end
   if g_opt.lang == "lua" then
-    wline(format("if dasm._VERSION ~= %d then", _info.vernum))
-    wline('  error("Version mismatch between DynASM and included encoding engine")')
-    wline("end")
+    wline(format('if dasm._VERSION ~= %d then error "Version mismatch between DynASM and included encoding engine" end', _info.vernum))
   else
     wline(format("#if DASM_VERSION != %d", _info.vernum))
     wline('#error "Version mismatch between DynASM and included encoding engine"')
@@ -848,7 +856,7 @@ dostmt = function(stmt)
   if sub(stmt, 1, 1) == "|" then
     local tail = sub(stmt, 2)
     wflush()
-    if sub(tail, 1, 2) == "//" then wcomment(tail) else wline(tail, true) end
+    if g_opt.lang ~= "lua" and sub(tail, 1, 2) == "//" then wcomment(tail) else wline(tail, true) end
     return
   end
 
@@ -895,6 +903,7 @@ local function doline(line)
   -- Emit C code (even from macros). Avoids echo and line parsing.
   if sub(aline, 1, 1) == "|" then
     if not mac_capture then
+      wflush()
       wsync()
     elseif g_opt.comment then
       wsync()
@@ -1055,10 +1064,10 @@ Usage: dynasm [OPTION]... INFILE.dasc|INFILE.dasl|-
 
   -c, --ccomment       Use /* */ comments for assembler lines.
   -C, --cppcomment     Use // comments for assembler lines (default).
-  -N, --nocomment      Suppress assembler lines in output.
+  -N, --nocomment      Suppress assembler lines; in Lua mode, also attempts to keep generated line numbers in sync.
   -M, --maccomment     Show macro expansions as comments (default off).
 
-  -L, --nolineno       Suppress CPP line number information in output.
+  -L, --nolineno       Suppress CPP line number information and Lua source line padding.
   -F, --flushline      Flush action list for every line.
 
   -D NAME[=SUBST]      Define a substitution.
@@ -1133,6 +1142,8 @@ local function setlang(infile)
       g_opt.cpp = false
       g_opt.comment = "--|"
       g_opt.endcomment = ""
+    else
+      g_synclineno = 0
     end
     -- Set initial defines only available in Lua mode.
     local ffi = require("ffi")

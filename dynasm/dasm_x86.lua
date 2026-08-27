@@ -132,21 +132,21 @@ local function writeactions(out, name)
   actlist[nn] = nil -- Remove last byte.
   if nn == 0 then nn = 1 end
   if luamode then
-    out:write("local ", name, " = ffi.new('const uint8_t[", nn, "]', {\n")
+    out:write("local ", name, ' = ffi.new("const uint8_t[', nn, ']",{')
+    for _, b in ipairs(actlist) do
+      out:write(b, ",")
+    end
+    out:write(last, "})\n") -- Add last byte back.
   else
     out:write("static const unsigned char ", name, "[", nn, "] = {\n")
-  end
-  local s = "  "
-  for n,b in ipairs(actlist) do
-    s = s..b..","
-    if #s >= 75 then
-      assert(out:write(s, "\n"))
-      s = "  "
+    local s = "  "
+    for n,b in ipairs(actlist) do
+      s = s..b..","
+      if #s >= 75 then
+        assert(out:write(s, "\n"))
+        s = "  "
+      end
     end
-  end
-  if luamode then
-    out:write(s, last, "\n})\n\n") -- Add last byte back.
-  else
     out:write(s, last, "\n};\n\n") -- Add last byte back.
   end
 end
@@ -255,13 +255,18 @@ local function writeglobals(out, prefix)
   local t = {}
   for name, n in pairs(map_global) do t[n] = name end
   if luamode then
+    out:write "local "
     local n = 0
     for i=10,next_global-1 do
-      out:write("local ", prefix, gsub(t[i], "@.*", ""), "\t= ", n, "\n")
+      out:write(prefix, gsub(t[i], "@.*", ""), ", ")
       n = n + 1
     end
-    out:write("local ", prefix, "_MAX\t= ", n, "\n") -- for compatibility with the C protocol
-    out:write("local DASM_MAXGLOBAL\t= ", n, "\n")
+    out:write(prefix, "_MAX, ") -- for compatibility with the C protocol
+    out:write("DASM_MAXGLOBAL = ")
+    for i = 0, n do
+      out:write(i, ", ")
+    end
+    out:write(n, "\n")
   else
     out:write("enum {\n")
     for i=10,next_global-1 do
@@ -276,9 +281,9 @@ local function writeglobalnames(out, name)
   local t = {}
   for name, n in pairs(map_global) do t[n] = name end
   if luamode then
-    out:write("local ", name, " = {\n")
+    out:write("local ", name, " = {")
     for i=10,next_global-1 do
-      out:write("  ", i == 10 and "[0] = " or "", "\"", t[i], "\",\n")
+      out:write(i == 10 and "[0]=" or "", '"', t[i], '",')
     end
     out:write("}\n")
   else
@@ -325,10 +330,10 @@ local function writeexternnames(out, name)
   local t = {}
   for name, n in pairs(map_extern) do t[-n] = name end
   if luamode then
-    out:write("local ", name, " = {\n")
+    out:write("local ", name, " = {")
     for i=1,-next_extern-1 do
-	   out:write(i==1 and "[0] = " or "", "\"", t[i], "\",\n")
-	end
+      out:write(i==1 and "[0]=" or "", '"', t[i], '",')
+    end
     out:write("}\n")
   else
 	 out:write("static const char *const ", name, "[] = {\n")
@@ -2418,10 +2423,9 @@ map_op[".type_3"] = function(params, nparams)
     reg = reg,
   }
   if luamode then
-    wline(format("local Dt%X; do local ct=ffi.typeof(\"%s\"); function Dt%X(f) return ffi.offsetof(ct,f) or error(string.format(\"'struct %s' has no member named '%%s'\", f)) end; end",
-      num, ctype, num, ctype))
-    wline(format("local Da%X; do local sz=ffi.sizeof(\"%s\"); function Da%X(i) return i*sz end; end",
-      num, ctype, num))
+    wline(format('local Dt%X, Da%X; do local ct,sz=ffi.typeof"%s",ffi.sizeof"%s";\z
+      function Dt%X(f) return ffi.offsetof(ct,f) or error(string.format("\'struct %s\' has no member named \'%%s\'", f)) end;\z
+      function Da%X(i) return i*sz end; end', num, num, ctype, ctype, num, ctype, num))
   else
     wline(format("#define Dt%X(_V) (int)(ptrdiff_t)&(((%s *)0)_V)", num, ctype))
   end

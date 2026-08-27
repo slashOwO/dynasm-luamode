@@ -289,6 +289,7 @@ and probably the simplest JIT compiler you could write. It too works on Windows,
 ## Changes to DynASM
 
 * Added `-l, --lang C|Lua` command line option (set automatically for dasl and dasc files).
+* In Lua mode, `-N` also attempts to keep generated line numbers in sync with the input by inserting blank lines. Use `-L` to disable this padding. This is best-effort only: macro expansion, `.include`, and `.capture`/`.dumpcapture` may break line alignment.
 * ASM comments now use `--` in Lua mode instead of `//`.
 * The defines `ARCH`, `OS`, `X86`, `X64`, `WINDOWS`, `LINUX`, and `OSX` are available by default in Lua mode.
 * The `.globals` directive generates `DASM_MAXGLOBAL` in Lua mode.

@@ -48,6 +48,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 local type, pairs, ipairs = type, pairs, ipairs
 local pcall, error, assert = pcall, error, assert
 local select, tostring = select, tostring
+local getmetatable, setmetatable = getmetatable, setmetatable
 local _s = string
 local sub, match, gmatch, gsub = _s.sub, _s.match, _s.gmatch, _s.gsub
 local format, rep, upper = _s.format, _s.rep, _s.upper
@@ -682,7 +683,6 @@ end
 -- Load architecture-specific module.
 local function loadarch(arch)
   if not match(arch, "^[%w_]+$") then return "bad arch name" end
-  _G._map_def = map_def
   local ok, m_arch = pcall(require, "dynasm.dasm_"..arch)
   if not ok then return "cannot load module: "..m_arch end
   g_arch = m_arch
@@ -703,7 +703,8 @@ function opt_map.dumparch(args)
 
   local t = {}
   for name in pairs(map_coreop) do t[#t+1] = name end
-  for name in pairs(map_op) do t[#t+1] = name end
+  local arch_map_op = getmetatable(map_op).__index
+  for name in pairs(arch_map_op) do t[#t+1] = name end
   sort(t)
 
   local out = stdout
@@ -1266,7 +1267,7 @@ if ... == "dynasm.dynasm" then -- use as module
   local function translate_tostring(infile, opt)
     local t = {}
     translate(infile, table_outfile(t), opt)
-    return table.concat(t)
+    return concat(t)
   end
 
   -- Create an iterator that translates an input file

@@ -102,11 +102,14 @@ elseif ffi.os == "Linux" or ffi.os == "BSD" or ffi.os == "OSX" then
   end
 end
 
+local free = function(addr, size)
+  return free(ffi.gc(addr, nil), size)
+end
+
 local new = function(size) -- override for hooking to gc
   local addr = new(size)
   ffi.gc(addr, function(addr)
-    free(addr, size)
-    ffi.gc(addr, nil)
+    return free(addr, size)
   end)
   return addr
 end

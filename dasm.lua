@@ -96,10 +96,14 @@ end
 -- low level API
 
 M.init = C.dasm_init
-M.free = C.dasm_free
 M.setupglobal = C.dasm_setupglobal
 M.growpc = C.dasm_growpc
 M.setup = C.dasm_setup
+M.free = function(state)
+  if state.p == nil then return end
+  C.dasm_free(state)
+  state.p = nil
+end
 
 local int_ct = ffi.typeof "int"
 local function convert_arg(arg) -- dasm_put() accepts only int32 varargs.

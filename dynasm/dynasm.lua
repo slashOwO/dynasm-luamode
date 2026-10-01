@@ -575,7 +575,9 @@ map_coreop[".capture_1"] = function(params)
   local buf = cap_buffers[name]
   if not buf then buf = {}; cap_buffers[name] = buf end
   g_capbuffer = buf
-  g_synclineno = 0
+  if g_opt.lang ~= "lua" then
+    g_synclineno = 0
+  end
 end
 
 -- Stop a capture.
@@ -585,7 +587,9 @@ map_coreop[".endcapture_0"] = function(params)
   cap_name = nil
   cap_lineno = nil
   g_capbuffer = nil
-  g_synclineno = 0
+  if g_opt.lang ~= "lua" then
+    g_synclineno = 0
+  end
 end
 
 -- Dump a capture buffer.
@@ -601,7 +605,9 @@ map_coreop[".dumpcapture_1"] = function(params)
     local buf = cap_buffers[name]
     if buf then wdumplines(out, buf) end
   end)
-  g_synclineno = 0
+  if g_opt.lang ~= "lua" then
+    g_synclineno = 0
+  end
 end
 
 -- Dump all captures and their buffers (with -PP only).

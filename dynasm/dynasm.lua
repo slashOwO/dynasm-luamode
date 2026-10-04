@@ -80,6 +80,15 @@ local g_errcount
 -- Write buffer for output file.
 local g_wbuffer, g_capbuffer
 
+-- Support variables for captures.
+local cap_lineno, cap_name, cap_buffers, cap_used
+
+-- Support variables for conditional assembly.
+local condlevel, condstack
+
+-- Support variables for macros.
+local mac_capture, mac_lineno, mac_name, mac_active, mac_list
+
 -- Map for defines (initially empty, chains to arch-specific map).
 local map_def
 
@@ -116,6 +125,17 @@ local function reset()
   g_arch = nil
   g_wbuffer = {}
   g_capbuffer = nil
+  cap_lineno = nil
+  cap_name = nil
+  cap_buffers = {}
+  cap_used = {}
+  condlevel = 0
+  condstack = {}
+  mac_capture = nil
+  mac_lineno = nil
+  mac_name = nil
+  mac_active = {}
+  mac_list = {}
   map_def = {}
   map_sections = {}
   map_op = setmetatable({}, { __index = map_initop })
@@ -306,10 +326,6 @@ end
 
 ------------------------------------------------------------------------------
 
--- Support variables for conditional assembly.
-local condlevel = 0
-local condstack = {}
-
 -- Evaluate condition with a Lua expression. Substitutions already performed.
 local function cond_eval(cond)
   local func, err
@@ -441,11 +457,6 @@ map_initop[".endif_0"] = map_coreop[".endif_0"]
 
 ------------------------------------------------------------------------------
 
--- Support variables for macros.
-local mac_capture, mac_lineno, mac_name
-local mac_active = {}
-local mac_list = {}
-
 -- Pseudo-opcode to define a macro.
 map_coreop[".macro_*"] = function(mparams)
   if not mparams then return "name [, params...]" end
@@ -552,11 +563,6 @@ local function checkmacros()
 end
 
 ------------------------------------------------------------------------------
-
--- Support variables for captures.
-local cap_lineno, cap_name
-local cap_buffers = {}
-local cap_used = {}
 
 -- Start a capture.
 map_coreop[".capture_1"] = function(params)

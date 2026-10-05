@@ -57,7 +57,7 @@ int dasm_getpclabel(Dst_DECL, unsigned int pc);
 /* Optional sanity checker to call between isolated encoding steps. */
 int dasm_checkstep(Dst_DECL, int secmatch);
 
-typedef int (*DASM_EXTERN_TYPE)(void *ctx, unsigned char *addr, int idx, int type);
+typedef int (*DASM_EXTERN_TYPE)(void *ctx, unsigned char *addr, unsigned int idx, int type);
 DASM_EXTERN_TYPE DASM_EXTERN_FUNC;
 ]]
 

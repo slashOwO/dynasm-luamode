@@ -115,7 +115,7 @@ local function reset()
   g_opt.lang = nil
   g_opt.comment = "//|"
   g_opt.endcomment = ""
-  g_opt.cpp = true -- Write `#line` directives
+  g_opt.cpp = true -- Write `#line` directives, or "padlines"
   g_fname = nil
   g_curline = nil
   g_indent = ""
@@ -163,6 +163,8 @@ local function wsync()
   if g_synclineno ~= g_lineno and g_opt.cpp then
     if g_opt.lang ~= "lua" then
       wline(format("#line %d %q", g_lineno, g_fname))
+    elseif g_opt.cpp == true then
+      wline(format("# %d %q", g_lineno, g_fname))
     elseif g_lineno > g_synclineno then
       wline(rep("\n", g_lineno - g_synclineno - 1))
     else
@@ -441,7 +443,7 @@ map_coreop[".include_1"] = function(params)
   -- Read the included file.
   local fatal = readfile(pathopen(g_opt.include, name) or
 			 wfatal("include file `"..name.."' not found"))
-  if g_opt.lang ~= "lua" then
+  if g_opt.lang ~= "lua" or g_opt.cpp == true then
     g_synclineno = -1 -- Restore state.
   end
   g_fname, g_lineno, g_curline, g_indent = gf, gl, gcl, gi
@@ -581,7 +583,7 @@ map_coreop[".capture_1"] = function(params)
   local buf = cap_buffers[name]
   if not buf then buf = {}; cap_buffers[name] = buf end
   g_capbuffer = buf
-  if g_opt.lang ~= "lua" then
+  if g_opt.lang ~= "lua" or g_opt.cpp == true then
     g_synclineno = 0
   end
 end
@@ -593,7 +595,7 @@ map_coreop[".endcapture_0"] = function(params)
   cap_name = nil
   cap_lineno = nil
   g_capbuffer = nil
-  if g_opt.lang ~= "lua" then
+  if g_opt.lang ~= "lua" or g_opt.cpp == true then
     g_synclineno = 0
   end
 end
@@ -611,7 +613,7 @@ map_coreop[".dumpcapture_1"] = function(params)
     local buf = cap_buffers[name]
     if buf then wdumplines(out, buf) end
   end)
-  if g_opt.lang ~= "lua" then
+  if g_opt.lang ~= "lua" or g_opt.cpp == true then
     g_synclineno = 0
   end
 end
@@ -981,6 +983,12 @@ end
 
 -- Read input file.
 readfile = function(fin)
+  g_indent = ""
+  if g_opt.lang ~= "lua" or g_opt.cpp == true then
+    g_lineno = 0
+    g_synclineno = -1
+  end
+
   -- Process all lines.
   for line in fin:lines() do
     g_lineno = g_lineno + 1
@@ -1077,10 +1085,11 @@ Usage: dynasm [OPTION]... INFILE.dasc|INFILE.dasl|-
 
   -c, --ccomment       Use /* */ comments for assembler lines.
   -C, --cppcomment     Use // comments for assembler lines (default).
-  -N, --nocomment      Suppress assembler lines; in Lua mode, also attempts to keep generated line numbers in sync.
+  -N, --nocomment      Suppress assembler lines in output.
   -M, --maccomment     Show macro expansions as comments (default off).
 
-  -L, --nolineno       Suppress CPP line number information and Lua source line padding.
+  -L, --nolineno       Suppress CPP/Lua line number information.
+  -p, --padlines       Use line padding instead of line number directives in Lua mode; implies -N.
   -F, --flushline      Flush action list for every line.
 
   -D NAME[=SUBST]      Define a substitution.
@@ -1108,6 +1117,7 @@ function opt_map.cppcomment() g_opt.comment = "//|"; g_opt.endcomment = "" end
 function opt_map.nocomment() g_opt.comment = false end
 function opt_map.maccomment() g_opt.maccomment = true end
 function opt_map.nolineno() g_opt.cpp = false end
+function opt_map.padlines() g_opt.cpp = g_opt.cpp and "padlines"; g_opt.comment = false end
 function opt_map.flushline() g_opt.flushline = true end
 function opt_map.dumpdef() g_opt.dumpdef = g_opt.dumpdef + 1 end
 
@@ -1119,7 +1129,7 @@ local opt_alias = {
   o = "outfile", I = "include",
   l = "lang",
   c = "ccomment", C = "cppcomment", N = "nocomment", M = "maccomment",
-  L = "nolineno", F = "flushline",
+  L = "nolineno", p = "padlines", F = "flushline",
   P = "dumpdef", A = "dumparch",
 }
 
@@ -1152,7 +1162,6 @@ local function setlang(infile)
   -- Adjust comment options for Lua mode.
   if g_opt.lang == "lua" then
     if g_opt.comment then
-      g_opt.cpp = false
       g_opt.comment = "--|"
       g_opt.endcomment = ""
     else
@@ -1290,9 +1299,11 @@ if ... == "dynasm.dynasm" then -- use as module
     end)
   end
 
+  -- Fallback to padding if the parser doesn't support line directives.
+  local cpp = load "\n#1" and true or "padlines"
   -- Load an input file and return it as a Lua chunk.
   local function dasl_load(infile, opt, chunkname, env)
-    opt = update({lang = "lua", comment = false}, opt)
+    opt = update({ lang = "lua", comment = false, cpp = cpp }, opt)
     local read = translate_toiter(infile, opt)
     chunkname = chunkname or "=(load)"
     return load(read, chunkname, "t", env)
@@ -1314,8 +1325,7 @@ if ... == "dynasm.dynasm" then -- use as module
     local path, reason = package.searchpath(modname, daslpath)
     if not path then return reason end
     return function()
-      local chunk = assert(dasl_loadfile(path, {comment = false}))
-      return chunk(modname)
+      return assert(dasl_loadfile(path))(modname)
     end
   end)
 
